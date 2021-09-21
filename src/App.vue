@@ -1,67 +1,72 @@
 <template>
   <div id="app">
-    <div>
-      <h2>Weather App</h2>
-    </div>
     <InputCity
-      @city-value="renderWeatherCity"
+      :citiesSuggestionsArr="citiesSuggestionsArr"
+      :hideSuggestions="hideSuggestions"
+      :cityName="citySearched"
+      @city-selected='citySelected'
+      @city-searched-name="searchedCity"
     />
     <section class="weather">
-      <div class="weather__data">
-        <h4> {{ weatherData.name }}, {{ getWeatherCountry }}</h4>
-        <p>{{ new Date().toDateString() }}</p>
-        <div class="weather__data__actual--temp">
-          <img :src="`https://openweathermap.org/img/w/${getWeatherIcon}.png`" />
-          <h3>{{ getWeatherActualTemp }}°</h3>
-        </div>
-        <p> {{ getWeatherDescription }}</p>
-        <div class="weather__data--variants">
-          <p><strong>Temp min:</strong> {{ getWeatherTempMin }}°</p>
-          <p><strong>Temp max:</strong> {{ getWeatherTempMax }}°</p>
-        </div>
-        <div class="weather__data--about">
-          <div class="weather--data--about--humidity">
-            <p><strong>Taux d'humidité:</strong>: {{ getWeatherHumidity }}%</p>
-          </div>
-          <div class="weather__data--about--wind">
-            <p><strong>Vent:</strong>{{ getWeatherWind }}km/h</p>
-          </div>
-        </div>
-      </div>
+      <actual-weather-data
+        :city="weatherData.name"
+        :country="getWeatherCountry"
+        :weatherIcon="getWeatherIcon"
+        :weatherDescription="getWeatherDescription"
+        :weatherDateDay="getWeatherDateDay"
+        :weatherDateMonth="getWeatherDateMonth"
+        :weatherTemp="getWeatherActualTemp"
+      >
+      </actual-weather-data>
+      <hr/>
+      <weather-data
+        :getWeatherTempMin="getWeatherTempMin"
+        :getWeatherTempMax="getWeatherTempMax"
+        :getWeatherHumidity="getWeatherHumidity"
+        :getWeatherWind="getWeatherWind"
+      >
+      </weather-data>
     </section>
   </div>
 </template>
 
 <script>
-import Vue from 'vue';
 import axios from 'axios';
 import InputCity from './components/InputCity.vue'
-import VueToast from 'vue-toast-notification';
-import 'vue-toast-notification/dist/theme-sugar.css';
+import WeatherData from './components/WeatherDataAbout.vue';
+import ActualWeatherData from './components/ActualWeatherData.vue';
 
 export default {
   name: 'App',
   components: {
-    InputCity
+    InputCity,
+    WeatherData,
+    ActualWeatherData
   },
 
   data() {
     return {
-      citySearched: 'Pellegrue',
+      citySearched: 'Paris',
       lang: 'fr',
       weatherData: {},
+      citiesSuggestionsArr: [],
+      hideSuggestions: true
     }
   },
 
   created() {
-    Vue.use(VueToast);
-
     this.getWeather(this.citySearched);
   },
 
   computed: {
     getWeatherCountry() {
       return this.weatherData.sys?.country;
+    },
+    getWeatherDateDay() {
+      return new Intl.DateTimeFormat('FR', { weekday: 'long'}).format();
+    },
+    getWeatherDateMonth() {
+      return new Date().getMonth();
     },
     getWeatherIcon() {
       return this.weatherData.weather?.[0].icon
@@ -84,66 +89,104 @@ export default {
     getWeatherWind() {
       return this.weatherData.wind?.speed;
     },
-
   },
 
   methods: {
-    cityValue(e) {
-      this.citySearched = e.e.target.value;
-    },
-
+    // Function to make API call to have weather thanks to this.citySearched
     async getWeather() {
       try {
         const { data } = await axios.get(`https://api.openweathermap.org/data/2.5/weather?q=${this.citySearched}&appid=${process.env.VUE_APP_WEATHER_API_KEY}&lang=${this.lang}&units=metric`);
 
         this.weatherData = data;
       } catch (error) {
-        Vue.$toast.error("Cette ville n'existe pas.");
+        this.$toast.error("Cette ville n'existe pas.");
       }
     },
 
-    renderWeatherCity(e) {
-      this.cityValue(e);
-      this.getWeather();
+    // Function to make API call to get weather's data
+    async searchedCity(e) {
+      // Condition to check input value and make API call
+      if (e !== '') {
+        try {
+          const { data } = await axios.get(`https://api.mapbox.com/geocoding/v5/mapbox.places/${e}.json?access_token=${process.env.VUE_APP_TOKEN_MAP_KEY}`);
+
+         this.citiesSuggestionsArr = data.features;
+         this.hideSuggestions = false;
+         return; // return to exit function and don't reset this.citiesSuggestionsArr
+        } catch (error) {
+          this.$toast.error("Cette ville n'a pas été trouvée.");
+        }
+      }
+
+      this.citiesSuggestionsArr = [];
+      this.hideSuggestions = true;
+    },
+
+    // Function to select city && pick up city's weather data
+    async citySelected(city) {
+      try {
+        const { data } = await axios.get(`https://api.openweathermap.org/data/2.5/weather?q=${city.target.outerText}&appid=${process.env.VUE_APP_WEATHER_API_KEY}&lang=${this.lang}&units=metric`);
+
+        this.weatherData = data;
+        this.hideSuggestions = true;
+      } catch (error) {
+        this.$toast.error("Cette ville n'a pas été trouvée.");
+      }
     }
   }
 }
 </script>
 
-<style lang="scss" scoped>
+<style lang="scss">
+@import "./assets/_variables.scss";
+
+body {
+  background: $background_color;
+  height: 100vh;
+}
+
 #app {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-align: center;
-  color: white;
-  margin-top: 10px;
-
-  h4, p {
-    margin: 10px;
-  }
+  color: $principal_color;
+  padding: 4%;
 
   .weather {
-    margin-top: 20%;
-    &__data {
-      margin-top: 8%;
-      &__actual--temp {
-        display: flex;
-        justify-content: center;
-        margin: 8% 0;
+    hr {
+      background: $principal_color;
+      opacity: .2;
+    }
 
-        img {
-          margin-right: 10px;
-        }
-      }
-      &--variants {
-        display: flex;
-        justify-content: space-between;
-      }
-      &--about {
-        margin-top: 10%;
+    @media screen and (min-width: 320px) {
+      margin-top: 18%;
+
+      hr {
+        margin: 15% 0;
       }
     }
+
+    @media screen and (min-width: 992px) {
+      margin-top: 25%;
+
+      hr {
+        margin: 20% 0;
+      }
+    }
+    @media screen and (min-width: 1200px) {
+      hr {
+        margin: 15% 0;
+      }
+    }
+    @media screen and (min-width: 1400px) {
+      margin-top: 15%;
+    }
+  }
+
+  @media screen and (min-width: 992px) {
+    width: 50%;
+    margin: auto;
   }
 }
 </style>
